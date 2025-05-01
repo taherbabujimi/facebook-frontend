@@ -28,7 +28,6 @@ function formatTimestamp(timestamp) {
     }
 
     const userData = await response.json();
-
     connectSocket(userData.userId);
   } catch (error) {
     console.error("Error verifying authentication:", error);
@@ -58,8 +57,9 @@ function connectSocket(userId) {
   });
 
   socket.on("userDetails", (userDetails) => {
+    console.log("User details:", userDetails);
     socket.user = userDetails;
-    updateConnectionUI(true, userDetails.id);
+    updateConnectionUI(true, userDetails);
   });
 
   socket.on("disconnect", () => {
@@ -78,23 +78,34 @@ function connectSocket(userId) {
 }
 
 // Update the UI based on connection status
-function updateConnectionUI(isConnected, userId = null) {
+function updateConnectionUI(isConnected, user = null) {
   const connectionIndicator = document.getElementById("connectionIndicator");
   const connectionStatus = document.getElementById("connectionStatus");
   const userInfoSection = document.getElementById("userInfoSection");
-  // const userAvatar = document.getElementById("userAvatar");
+  const userAvatar = document.getElementById("userAvatar");
   const currentUserId = document.getElementById("currentUserId");
+  const messageInput = document.getElementById("messageInput");
+  const sendButton = document.getElementById("sendButton");
 
-  if (isConnected && userId) {
+  if (isConnected && user) {
     connectionIndicator.classList.add("connected");
     connectionStatus.textContent = "Connected";
     userInfoSection.style.display = "flex";
-    // userAvatar.textContent = userId.substring(0, 2).toUpperCase();
-    currentUserId.textContent = userId;
+    // Set avatar initials based on userId
+    userAvatar.textContent = user.username.substring(0, 2).toUpperCase();
+    currentUserId.textContent = user.id;
+
+    // Enable message input and send button once connected
+    messageInput.disabled = false;
+    sendButton.disabled = false;
   } else {
     connectionIndicator.classList.remove("connected");
     connectionStatus.textContent = "Disconnected";
     userInfoSection.style.display = "none";
+
+    // Disable message input and send button when disconnected
+    messageInput.disabled = true;
+    sendButton.disabled = true;
   }
 }
 
@@ -112,11 +123,34 @@ function startConversation() {
     return;
   }
 
+  // Show loading indicator
+  const loadingIndicator = document.getElementById("loadingIndicator");
+  loadingIndicator.style.display = "flex";
+
   socket.emit("startConversation", { recipientId: receiverId }, (response) => {
+    // Hide loading indicator
+    loadingIndicator.style.display = "none";
+
     if (response.success) {
-      alert(`Conversation started with ${response.recipient.username}`);
       currentRoomId = response.roomId;
       document.getElementById("chatWindow").innerHTML = "";
+
+      // Add no messages indicator
+      const noMessagesIndicator = document.createElement("div");
+      noMessagesIndicator.id = "noMessagesIndicator";
+      noMessagesIndicator.className = "no-messages";
+      noMessagesIndicator.innerHTML = `
+        <i class="fas fa-comments" style="font-size: 24px; margin-bottom: 12px; color: #c1c9d7"></i>
+        <div>No messages yet with ${
+          response.recipient.username || receiverId
+        }</div>
+      `;
+      document.getElementById("chatWindow").appendChild(noMessagesIndicator);
+
+      // Enable message input and send button
+      document.getElementById("messageInput").disabled = false;
+      document.getElementById("sendButton").disabled = false;
+
       loadMessages(currentRoomId);
     } else {
       alert(`Error: ${response.error}`);
@@ -131,10 +165,10 @@ function sendMessage() {
     return;
   }
 
-  const content = document.getElementById("messageInput").value;
+  const messageInput = document.getElementById("messageInput");
+  const content = messageInput.value.trim();
 
   if (!content) {
-    alert("Please enter a message!");
     return;
   }
 
@@ -148,13 +182,19 @@ function sendMessage() {
     content: content,
   };
 
+  // Clear input immediately for better UX
+  messageInput.value = "";
+
+  // Focus back on input
+  messageInput.focus();
+
   socket.emit("sendMessage", message, (response) => {
     if (response.error) {
       alert(`Error sending message: ${response.error}`);
+      // Put the message back in the input if it failed
+      messageInput.value = content;
       return;
     }
-
-    document.getElementById("messageInput").value = "";
   });
 }
 
@@ -165,15 +205,27 @@ function loadMessages(roomId, page = 1, limit = 20) {
     return;
   }
 
+  // Show loading indicator
+  const loadingIndicator = document.getElementById("loadingIndicator");
+  loadingIndicator.style.display = "flex";
+
   socket.emit("loadMessages", { roomId, page, limit }, (response) => {
+    // Hide loading indicator
+    loadingIndicator.style.display = "none";
+
     if (response.success) {
       const chatWindow = document.getElementById("chatWindow");
       chatWindow.innerHTML = "";
 
       if (response.messages.length === 0) {
-        const noMessagesElement = document.createElement("p");
-        noMessagesElement.textContent = "No messages found.";
-        chatWindow.appendChild(noMessagesElement);
+        const noMessagesIndicator = document.createElement("div");
+        noMessagesIndicator.className = "no-messages";
+        noMessagesIndicator.id = "noMessagesIndicator";
+        noMessagesIndicator.innerHTML = `
+          <i class="fas fa-comments" style="font-size: 24px; margin-bottom: 12px; color: #c1c9d7"></i>
+          <div>No messages in this conversation yet</div>
+        `;
+        chatWindow.appendChild(noMessagesIndicator);
         return;
       }
 
@@ -214,31 +266,53 @@ function renderMessage(message, isSent) {
   }
 
   const messageElement = document.createElement("div");
-  messageElement.className = `message ${isSent ? "sent" : "received"}`;
+  messageElement.className = `message message-${isSent ? "sent" : "received"}`;
 
-  const senderName = document.createElement("div");
-  senderName.className = "sender";
-  senderName.textContent = isSent ? "You" : message.senderName;
+  // Format message content
+  const contentText = message.content;
 
-  const contentText = document.createElement("div");
-  contentText.className = "content";
-  contentText.textContent = message.content;
+  // Add timestamp
+  const timeElement = document.createElement("span");
+  timeElement.className = "message-time";
+  timeElement.textContent = formatTimestamp(message.createdAt || new Date());
 
-  const timestamp = document.createElement("div");
-  timestamp.className = "timestamp";
-  timestamp.textContent = formatTimestamp(message.createdAt);
-
-  messageElement.appendChild(senderName);
-  messageElement.appendChild(contentText);
-  messageElement.appendChild(timestamp);
+  // Set the inner HTML of the message
+  messageElement.textContent = contentText;
+  messageElement.appendChild(timeElement);
 
   chatWindow.appendChild(messageElement);
   chatWindow.scrollTop = chatWindow.scrollHeight;
 }
 
-// Attach events
-document.getElementById("confirmButton").onclick = startConversation;
-document.getElementById("sendButton").onclick = sendMessage;
-document
-  .getElementById("chatWindow")
-  .addEventListener("scroll", markMessagesAsRead);
+// Attach event listeners
+document.addEventListener("DOMContentLoaded", () => {
+  document
+    .getElementById("confirmButton")
+    .addEventListener("click", startConversation);
+  document.getElementById("sendButton").addEventListener("click", sendMessage);
+
+  // Submit message on Enter key
+  document
+    .getElementById("messageInput")
+    .addEventListener("keypress", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        sendMessage();
+      }
+    });
+
+  // Submit receiver ID on Enter key
+  document
+    .getElementById("receiverId")
+    .addEventListener("keypress", (event) => {
+      if (event.key === "Enter") {
+        event.preventDefault();
+        startConversation();
+      }
+    });
+
+  // Mark messages as read when scrolling chat window
+  document
+    .getElementById("chatWindow")
+    .addEventListener("scroll", markMessagesAsRead);
+});
