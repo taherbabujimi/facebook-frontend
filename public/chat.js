@@ -28,7 +28,6 @@ function formatTimestamp(timestamp) {
     }
 
     const userData = await response.json();
-    console.log("Authenticated User:", userData);
 
     connectSocket(userData.userId);
   } catch (error) {
@@ -55,25 +54,20 @@ function connectSocket(userId) {
   });
 
   socket.on("connect", () => {
-    console.log("Connected to the server! Socket ID:", socket.id);
     socket.emit("registerUser", userId);
   });
 
   socket.on("userDetails", (userDetails) => {
-    console.log("User details received from server:", userDetails);
     socket.user = userDetails;
     updateConnectionUI(true, userDetails.id);
   });
 
   socket.on("disconnect", () => {
-    console.log("Disconnected from the server.");
     alert("You have been disconnected.");
     updateConnectionUI(false);
   });
 
   socket.on("receiveMessage", (message) => {
-    console.log("New message received:", message);
-
     if (message.roomId === currentRoomId) {
       const isSent = message.senderId === socket.user.id;
       renderMessage(message, isSent);
@@ -88,14 +82,14 @@ function updateConnectionUI(isConnected, userId = null) {
   const connectionIndicator = document.getElementById("connectionIndicator");
   const connectionStatus = document.getElementById("connectionStatus");
   const userInfoSection = document.getElementById("userInfoSection");
-  const userAvatar = document.getElementById("userAvatar");
+  // const userAvatar = document.getElementById("userAvatar");
   const currentUserId = document.getElementById("currentUserId");
 
   if (isConnected && userId) {
     connectionIndicator.classList.add("connected");
     connectionStatus.textContent = "Connected";
     userInfoSection.style.display = "flex";
-    userAvatar.textContent = userId.substring(0, 2).toUpperCase();
+    // userAvatar.textContent = userId.substring(0, 2).toUpperCase();
     currentUserId.textContent = userId;
   } else {
     connectionIndicator.classList.remove("connected");
@@ -120,7 +114,6 @@ function startConversation() {
 
   socket.emit("startConversation", { recipientId: receiverId }, (response) => {
     if (response.success) {
-      console.log("Conversation started:", response);
       alert(`Conversation started with ${response.recipient.username}`);
       currentRoomId = response.roomId;
       document.getElementById("chatWindow").innerHTML = "";
@@ -161,10 +154,6 @@ function sendMessage() {
       return;
     }
 
-    renderMessage(
-      { content: content, createdAt: new Date(), senderId: socket.user.id },
-      true
-    );
     document.getElementById("messageInput").value = "";
   });
 }
@@ -178,8 +167,6 @@ function loadMessages(roomId, page = 1, limit = 20) {
 
   socket.emit("loadMessages", { roomId, page, limit }, (response) => {
     if (response.success) {
-      console.log("Messages loaded:", response.messages);
-
       const chatWindow = document.getElementById("chatWindow");
       chatWindow.innerHTML = "";
 
@@ -231,9 +218,7 @@ function renderMessage(message, isSent) {
 
   const senderName = document.createElement("div");
   senderName.className = "sender";
-  senderName.textContent = isSent
-    ? "You"
-    : message.senderName || `User ${message.senderId}`;
+  senderName.textContent = isSent ? "You" : message.senderName;
 
   const contentText = document.createElement("div");
   contentText.className = "content";
