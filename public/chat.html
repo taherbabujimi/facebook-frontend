@@ -396,6 +396,105 @@
         font-size: 16px;
       }
 
+      /* Message Reaction Styles */
+      .message-reactions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+        margin-top: 8px;
+      }
+
+      .reaction-count {
+        font-size: 11px;
+        background-color: rgba(255, 255, 255, 0.3);
+        border-radius: 10px;
+        padding: 2px 6px;
+        display: inline-flex;
+        align-items: center;
+        gap: 3px;
+        cursor: pointer;
+        transition: transform 0.2s ease;
+      }
+
+      .reaction-count:hover {
+        transform: scale(1.1);
+      }
+
+      .message-sent .reaction-count {
+        background-color: rgba(255, 255, 255, 0.3);
+        color: white;
+      }
+
+      .message-received .reaction-count {
+        background-color: rgba(0, 0, 0, 0.1);
+        color: #333;
+      }
+
+      /* Reaction Picker */
+      .reaction-picker {
+        position: absolute;
+        display: flex;
+        background-color: white;
+        border-radius: 24px;
+        padding: 6px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        z-index: 10;
+        animation: fadeIn 0.2s ease;
+        bottom: -40px;
+        left: 50%;
+        transform: translateX(-50%);
+        display: none;
+      }
+
+      .reaction-picker.visible {
+        display: flex;
+      }
+
+      .reaction-btn {
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        cursor: pointer;
+        font-size: 16px;
+        background-color: transparent;
+        border: none;
+        transition: transform 0.2s ease;
+      }
+
+      .reaction-btn:hover {
+        transform: scale(1.2);
+        background-color: rgba(74, 107, 255, 0.1);
+      }
+
+      .reaction-toggle {
+        position: absolute;
+        bottom: -8px;
+        left: 50%;
+        transform: translateX(-50%);
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        background-color: rgba(255, 255, 255, 0.9);
+        border: 1px solid #eaeef5;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        padding: 0;
+        opacity: 0;
+        transition: opacity 0.2s ease;
+        font-size: 10px;
+        color: #555;
+      }
+
+      .message:hover .reaction-toggle {
+        opacity: 1;
+      }
+
       /* Responsive adjustments */
       @media (max-width: 768px) {
         .container {
@@ -414,6 +513,10 @@
 
         .input-row {
           flex-direction: column;
+        }
+
+        .reaction-picker {
+          bottom: -35px;
         }
       }
     </style>
@@ -486,5 +589,17 @@
         </div>
       </main>
     </div>
+
+    <!-- Reaction Picker Template (Will be cloned and used for each message) -->
+    <template id="reactionPickerTemplate">
+      <div class="reaction-picker">
+        <button class="reaction-btn" data-reaction="👍" title="Like">👍</button>
+        <button class="reaction-btn" data-reaction="❤️" title="Love">❤️</button>
+        <button class="reaction-btn" data-reaction="😆" title="Haha">😆</button>
+        <button class="reaction-btn" data-reaction="😮" title="Wow">😮</button>
+        <button class="reaction-btn" data-reaction="😢" title="Sad">😢</button>
+        <button class="reaction-btn" data-reaction="😠" title="Angry">😠</button>
+      </div>
+    </template>
   </body>
 </html>

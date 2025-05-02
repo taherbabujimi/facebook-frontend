@@ -2,6 +2,16 @@
 
 let socket;
 let currentRoomId = null;
+let currenttUserId = null;
+
+const reactionMap = {
+  "👍": "like",
+  "❤️": "love",
+  "😆": "laugh",
+  "😮": "wow",
+  "😢": "sad",
+  "😠": "angry",
+};
 
 // Format a timestamp into a readable format
 function formatTimestamp(timestamp) {
@@ -82,6 +92,13 @@ function connectSocket(userId) {
       removeMessageFromUI(data.messageId);
     }
   });
+
+  // Listen for reaction events
+  socket.on("messageReactionUpdated", (data) => {
+    if (data.roomId === currentRoomId) {
+      updateMessageReactions(data.messageId, data.reactions);
+    }
+  });
 }
 
 // Update the UI based on connection status
@@ -101,6 +118,7 @@ function updateConnectionUI(isConnected, user = null) {
     // Set avatar initials based on userId
     userAvatar.textContent = user.username.substring(0, 2).toUpperCase();
     currentUserId.textContent = user.id;
+    currenttUserId = user.id;
 
     // Enable message input and send button once connected
     messageInput.disabled = false;
@@ -227,6 +245,189 @@ function deleteMessage(messageId) {
       alert(`Error deleting message: ${response.error}`);
     }
   });
+}
+
+// Add a reaction to a message
+function addReaction(messageId, reaction, userId = currenttUserId) {
+  if (!socket) {
+    alert("You are not connected to the server. Please connect first!");
+    return;
+  }
+
+  const reactionType = reactionMap[reaction];
+
+  console.log("Adding reaction:", reactionType);
+
+  console.log("Message ID:", messageId);
+
+  if (!reactionType) {
+    console.error("Invalid reaction:", reaction);
+    return;
+  }
+
+  socket.emit(
+    "addReaction",
+    { messageId, reaction: reactionType, userId },
+    (response) => {
+      if (!response.success) {
+        alert(`Error adding reaction: ${response.error}`);
+      }
+    }
+  );
+}
+
+// Remove a reaction from a message
+function removeReaction(messageId, reaction) {
+  if (!socket) {
+    alert("You are not connected to the server. Please connect first!");
+    return;
+  }
+
+  const reactionType = reactionMap[reaction];
+  if (!reactionType) {
+    console.error("Invalid reaction:", reaction);
+    return;
+  }
+
+  socket.emit(
+    "removeReaction",
+    { messageId, reaction: reactionType },
+    (response) => {
+      if (!response.success) {
+        alert(`Error removing reaction: ${response.error}`);
+      }
+    }
+  );
+}
+
+// Toggle reaction on a message
+function toggleReaction(messageId, reaction) {
+  const messageElement = document.getElementById(`message-${messageId}`);
+  if (!messageElement) return;
+
+  const existingReaction = messageElement.querySelector(
+    `.reaction-count[data-reaction="${reaction}"]`
+  );
+  if (existingReaction && existingReaction.dataset.userReacted === "true") {
+    removeReaction(messageId, reaction);
+  } else {
+    addReaction(messageId, reaction);
+  }
+}
+
+// Update the reactions display for a message
+function updateMessageReactions(messageId, reactions) {
+  const messageElement = document.getElementById(`message-${messageId}`);
+  if (!messageElement) return;
+
+  // Get or create reactions container
+  let reactionsContainer = messageElement.querySelector(".message-reactions");
+  if (!reactionsContainer) {
+    reactionsContainer = document.createElement("div");
+    reactionsContainer.className = "message-reactions";
+    messageElement.appendChild(reactionsContainer);
+  } else {
+    reactionsContainer.innerHTML = "";
+  }
+
+  // Add reactions
+  if (reactions && Object.keys(reactions).length > 0) {
+    for (const [reaction, users] of Object.entries(reactions)) {
+      if (users.length > 0) {
+        const reactionElement = document.createElement("span");
+        reactionElement.className = "reaction-count";
+        reactionElement.dataset.reaction = reaction;
+
+        // Check if current user has reacted
+        const hasUserReacted = users.includes(socket.user.id);
+        reactionElement.dataset.userReacted = hasUserReacted.toString();
+
+        // Set opacity based on whether user has reacted
+        if (hasUserReacted) {
+          reactionElement.style.opacity = "1";
+        } else {
+          reactionElement.style.opacity = "0.7";
+        }
+
+        reactionElement.innerHTML = `${reaction} ${users.length}`;
+
+        // Add click event to toggle reaction
+        reactionElement.addEventListener("click", () => {
+          toggleReaction(messageId, reaction);
+        });
+
+        reactionsContainer.appendChild(reactionElement);
+      }
+    }
+  }
+}
+
+// Show reaction picker for a message
+function showReactionPicker(messageElement, messageId) {
+  // Close any existing reaction pickers
+  closeAllReactionPickers();
+
+  // Clone the template
+  const template = document.getElementById("reactionPickerTemplate");
+  const reactionPicker = template.content.cloneNode(true);
+
+  // Get the reaction picker element
+  const pickerElement = reactionPicker.querySelector(".reaction-picker");
+
+  // Position the picker differently based on message alignment
+  if (messageElement.classList.contains("message-sent")) {
+    // For right-aligned (sent) messages
+    pickerElement.style.left = "auto";
+    pickerElement.style.right = "-135%";
+  } else {
+    // For left-aligned (received) messages
+    pickerElement.style.right = "auto";
+    pickerElement.style.left = "140%";
+  }
+
+  // Add the reaction picker to the message
+  messageElement.appendChild(reactionPicker);
+
+  // Make it visible
+  const addedPickerElement = messageElement.querySelector(".reaction-picker");
+  addedPickerElement.classList.add("visible");
+
+  // Add event listeners to reaction buttons
+  const reactionButtons = addedPickerElement.querySelectorAll(".reaction-btn");
+  reactionButtons.forEach((button) => {
+    const reaction = button.dataset.reaction;
+    button.addEventListener("click", () => {
+      toggleReaction(messageId, reaction);
+      closeAllReactionPickers();
+    });
+  });
+
+  // Close picker when clicking outside
+  document.addEventListener("click", closePickerOnOutsideClick);
+}
+
+// Close all reaction pickers
+function closeAllReactionPickers() {
+  document.removeEventListener("click", closePickerOnOutsideClick);
+  const pickers = document.querySelectorAll(".reaction-picker.visible");
+  pickers.forEach((picker) => {
+    picker.classList.remove("visible");
+    setTimeout(() => {
+      if (picker.parentNode) {
+        picker.parentNode.removeChild(picker);
+      }
+    }, 200);
+  });
+}
+
+// Close picker when clicking outside
+function closePickerOnOutsideClick(event) {
+  if (
+    !event.target.closest(".reaction-picker") &&
+    !event.target.closest(".reaction-toggle")
+  ) {
+    closeAllReactionPickers();
+  }
 }
 
 // Remove a deleted message from the UI
@@ -357,6 +558,21 @@ function renderMessage(message, isSent) {
     messageElement.appendChild(deleteButton);
   }
 
+  // Add reaction toggle button
+  const reactionToggle = document.createElement("button");
+  reactionToggle.className = "reaction-toggle";
+  reactionToggle.innerHTML = '<i class="fas fa-smile"></i>';
+  reactionToggle.addEventListener("click", function (event) {
+    event.stopPropagation(); // Prevent event bubbling
+    showReactionPicker(messageElement, message.id);
+  });
+  messageElement.appendChild(reactionToggle);
+
+  // Add reactions if any exist
+  if (message.reactions && Object.keys(message.reactions).length > 0) {
+    updateMessageReactions(message.id, message.reactions);
+  }
+
   chatWindow.appendChild(messageElement);
   chatWindow.scrollTop = chatWindow.scrollHeight;
 }
@@ -392,4 +608,14 @@ document.addEventListener("DOMContentLoaded", () => {
   document
     .getElementById("chatWindow")
     .addEventListener("scroll", markMessagesAsRead);
+
+  // Close reaction pickers when clicking outside
+  document.addEventListener("click", (event) => {
+    if (
+      !event.target.closest(".reaction-picker") &&
+      !event.target.closest(".reaction-toggle")
+    ) {
+      closeAllReactionPickers();
+    }
+  });
 });
