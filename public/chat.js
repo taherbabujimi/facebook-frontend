@@ -75,6 +75,13 @@ function connectSocket(userId) {
       console.log("Message received for a different room. Ignoring.");
     }
   });
+
+  // Listen for message deletion events
+  socket.on("messageDeleted", (data) => {
+    if (data.roomId === currentRoomId) {
+      removeMessageFromUI(data.messageId);
+    }
+  });
 }
 
 // Update the UI based on connection status
@@ -198,6 +205,58 @@ function sendMessage() {
   });
 }
 
+// Delete a message
+function deleteMessage(messageId) {
+  if (!socket) {
+    alert("You are not connected to the server. Please connect first!");
+    return;
+  }
+
+  // Show loading indicator
+  const loadingIndicator = document.getElementById("loadingIndicator");
+  loadingIndicator.style.display = "flex";
+
+  socket.emit("deleteMessage", { messageId }, (response) => {
+    // Hide loading indicator
+    loadingIndicator.style.display = "none";
+
+    if (response.success) {
+      // The UI update will happen via the messageDeleted event
+      console.log("Message deleted successfully");
+    } else {
+      alert(`Error deleting message: ${response.error}`);
+    }
+  });
+}
+
+// Remove a deleted message from the UI
+function removeMessageFromUI(messageId) {
+  const messageElement = document.getElementById(`message-${messageId}`);
+  if (messageElement) {
+    // Fade out animation
+    messageElement.style.opacity = "0";
+    messageElement.style.transform = "scale(0.8)";
+
+    // Remove after animation completes
+    setTimeout(() => {
+      messageElement.remove();
+
+      // Check if we need to show the "no messages" indicator
+      const chatWindow = document.getElementById("chatWindow");
+      if (chatWindow.children.length === 0) {
+        const noMessagesIndicator = document.createElement("div");
+        noMessagesIndicator.id = "noMessagesIndicator";
+        noMessagesIndicator.className = "no-messages";
+        noMessagesIndicator.innerHTML = `
+          <i class="fas fa-comments" style="font-size: 24px; margin-bottom: 12px; color: #c1c9d7"></i>
+          <div>No messages in this conversation yet</div>
+        `;
+        chatWindow.appendChild(noMessagesIndicator);
+      }
+    }, 300);
+  }
+}
+
 // Load message history
 function loadMessages(roomId, page = 1, limit = 20) {
   if (!socket) {
@@ -267,6 +326,11 @@ function renderMessage(message, isSent) {
 
   const messageElement = document.createElement("div");
   messageElement.className = `message message-${isSent ? "sent" : "received"}`;
+  messageElement.id = `message-${message.id}`; // Add ID for easy reference
+  messageElement.dataset.messageId = message.id;
+
+  // Add transition for smooth animations
+  messageElement.style.transition = "opacity 0.3s ease, transform 0.3s ease";
 
   // Format message content
   const contentText = message.content;
@@ -279,6 +343,19 @@ function renderMessage(message, isSent) {
   // Set the inner HTML of the message
   messageElement.textContent = contentText;
   messageElement.appendChild(timeElement);
+
+  // Add delete option for sent messages
+  if (isSent) {
+    const deleteButton = document.createElement("button");
+    deleteButton.className = "delete-message";
+    deleteButton.innerHTML = '<i class="fas fa-trash"></i>';
+    deleteButton.addEventListener("click", function () {
+      if (confirm("Are you sure you want to delete this message?")) {
+        deleteMessage(message.id);
+      }
+    });
+    messageElement.appendChild(deleteButton);
+  }
 
   chatWindow.appendChild(messageElement);
   chatWindow.scrollTop = chatWindow.scrollHeight;
