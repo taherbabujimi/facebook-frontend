@@ -3,6 +3,7 @@
 let socket;
 let currentRoomId = null;
 let currenttUserId = null;
+const pendingReactionUpdates = new Map();
 
 const reactionMap = {
   "👍": "like",
@@ -67,7 +68,6 @@ function connectSocket(userId) {
   });
 
   socket.on("userDetails", (userDetails) => {
-    console.log("User details:", userDetails);
     socket.user = userDetails;
     updateConnectionUI(true, userDetails);
   });
@@ -256,10 +256,6 @@ function addReaction(messageId, reaction, userId = currenttUserId) {
 
   const reactionType = reactionMap[reaction];
 
-  console.log("Adding reaction:", reactionType);
-
-  console.log("Message ID:", messageId);
-
   if (!reactionType) {
     console.error("Invalid reaction:", reaction);
     return;
@@ -277,7 +273,7 @@ function addReaction(messageId, reaction, userId = currenttUserId) {
 }
 
 // Remove a reaction from a message
-function removeReaction(messageId, reaction) {
+function removeReaction(messageId, reaction, userId = currenttUserId) {
   if (!socket) {
     alert("You are not connected to the server. Please connect first!");
     return;
@@ -291,7 +287,7 @@ function removeReaction(messageId, reaction) {
 
   socket.emit(
     "removeReaction",
-    { messageId, reaction: reactionType },
+    { messageId, reaction: reactionType, userId },
     (response) => {
       if (!response.success) {
         alert(`Error removing reaction: ${response.error}`);
@@ -317,8 +313,50 @@ function toggleReaction(messageId, reaction) {
 
 // Update the reactions display for a message
 function updateMessageReactions(messageId, reactions) {
-  const messageElement = document.getElementById(`message-${messageId}`);
-  if (!messageElement) return;
+  // Check if messageId is valid
+  if (!messageId) {
+    console.error("Invalid messageId provided", messageId);
+    return;
+  }
+
+  // Handle different data formats for reactions
+  let reactionsObj = {};
+  if (Array.isArray(reactions)) {
+    // If reactions is an array, convert it to the expected object format
+    reactions.forEach((reaction) => {
+      // Handle the case where each reaction has reactionType and userId
+      if (reaction.reactionType && reaction.userId) {
+        // If this reaction type doesn't exist yet, create an array for it
+        if (!reactionsObj[reaction.reactionType]) {
+          reactionsObj[reaction.reactionType] = [];
+        }
+        // Add this userId to the array for this reaction type
+        reactionsObj[reaction.reactionType].push(reaction.userId);
+      }
+    });
+  } else if (typeof reactions === "object" && reactions !== null) {
+    // Make sure each value is an array
+    for (const [key, value] of Object.entries(reactions)) {
+      if (!Array.isArray(value)) {
+        // If the value is not an array, convert it to an array
+        reactionsObj[key] = Array.isArray(value) ? value : [value];
+      } else {
+        reactionsObj[key] = value;
+      }
+    }
+  } else {
+    console.error("Invalid reactions format", reactions);
+    return;
+  }
+
+  // Try to find the message element
+  let messageElement = document.getElementById(`message-${messageId}`);
+
+  // If message element doesn't exist, queue the reaction update for later
+  if (!messageElement) {
+    pendingReactionUpdates.set(messageId.toString(), reactionsObj);
+    return;
+  }
 
   // Get or create reactions container
   let reactionsContainer = messageElement.querySelector(".message-reactions");
@@ -331,29 +369,37 @@ function updateMessageReactions(messageId, reactions) {
   }
 
   // Add reactions
-  if (reactions && Object.keys(reactions).length > 0) {
-    for (const [reaction, users] of Object.entries(reactions)) {
-      if (users.length > 0) {
+  if (Object.keys(reactionsObj).length > 0) {
+    // Find emoji by reaction type
+    const findEmojiByType = (type) => {
+      for (const [emoji, reactionType] of Object.entries(reactionMap)) {
+        if (reactionType === type) {
+          return emoji;
+        }
+      }
+      return type; // Fall back to the type if no emoji is found
+    };
+
+    for (const [reactionType, users] of Object.entries(reactionsObj)) {
+      if (users && users.length > 0) {
+        const emoji = findEmojiByType(reactionType);
         const reactionElement = document.createElement("span");
         reactionElement.className = "reaction-count";
-        reactionElement.dataset.reaction = reaction;
+        reactionElement.dataset.reaction = emoji;
 
         // Check if current user has reacted
-        const hasUserReacted = users.includes(socket.user.id);
+        const currentUserId = socket.user ? socket.user.id : null;
+        const hasUserReacted = currentUserId && users.includes(currentUserId);
         reactionElement.dataset.userReacted = hasUserReacted.toString();
 
         // Set opacity based on whether user has reacted
-        if (hasUserReacted) {
-          reactionElement.style.opacity = "1";
-        } else {
-          reactionElement.style.opacity = "0.7";
-        }
+        reactionElement.style.opacity = hasUserReacted ? "1" : "0.7";
 
-        reactionElement.innerHTML = `${reaction} ${users.length}`;
+        reactionElement.innerHTML = `${emoji} ${users.length}`;
 
         // Add click event to toggle reaction
         reactionElement.addEventListener("click", () => {
-          toggleReaction(messageId, reaction);
+          toggleReaction(messageId, emoji);
         });
 
         reactionsContainer.appendChild(reactionElement);
@@ -508,9 +554,7 @@ function markMessagesAsRead() {
   }
 
   socket.emit("markAsRead", { roomId: currentRoomId }, (response) => {
-    if (response.success) {
-      console.log("Messages marked as read:", response.messagesRead);
-    } else {
+    if (!response.success) {
       console.error("Error marking messages as read:", response.error);
     }
   });
@@ -568,12 +612,23 @@ function renderMessage(message, isSent) {
   });
   messageElement.appendChild(reactionToggle);
 
-  // Add reactions if any exist
-  if (message.reactions && Object.keys(message.reactions).length > 0) {
+  chatWindow.appendChild(messageElement);
+
+  // Check if there are pending reaction updates for this message
+  const pendingReactions = pendingReactionUpdates.get(message.id.toString());
+  if (pendingReactions) {
+    console.log(
+      `Found pending reactions for message ${message.id}`,
+      pendingReactions
+    );
+    // Apply the pending reaction updates
+    updateMessageReactions(message.id, pendingReactions);
+    // Remove from pending queue
+    pendingReactionUpdates.delete(message.id.toString());
+  } else if (message.reactions && Object.keys(message.reactions).length > 0) {
     updateMessageReactions(message.id, message.reactions);
   }
 
-  chatWindow.appendChild(messageElement);
   chatWindow.scrollTop = chatWindow.scrollHeight;
 }
 
