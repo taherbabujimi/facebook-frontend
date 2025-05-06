@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>WhatsApp Style Chat</title>
+    <title>Chat</title>
     <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
     <script type="module" src="chat.js" defer></script>
     <link
@@ -26,6 +26,7 @@
         display: flex;
         justify-content: center;
         align-items: center;
+        overflow-x: hidden; /* Prevent horizontal scroll on body */
       }
 
       .container {
@@ -38,6 +39,7 @@
         display: flex;
         flex-direction: column;
         overflow: hidden;
+        position: relative; /* Added to contain absolute positioned elements */
       }
 
       /* Header styles */
@@ -221,6 +223,7 @@
       .chat-window {
         flex: 1;
         overflow-y: auto;
+        overflow-x: hidden; /* Prevent horizontal scrolling */
         padding: 12px;
         display: flex;
         flex-direction: column;
@@ -230,6 +233,7 @@
         border: 1px solid #eaeef5;
         scrollbar-width: thin;
         scrollbar-color: #c1c9d7 #f5f7fb;
+        position: relative; /* Added to contain absolute positioned elements */
       }
 
       .chat-window::-webkit-scrollbar {
@@ -322,6 +326,31 @@
         border-right-color: #e9ecf2;
         border-left: 0;
         border-bottom: 0;
+      }
+
+      /* Media content styles - Added for fixing overflow issues */
+      .media-preview {
+        margin: -4px -8px 6px;
+        border-radius: 6px 6px 0 0;
+        overflow: hidden;
+        max-width: 100%;
+      }
+
+      .shared-media {
+        width: 100%;
+        max-width: 100%;
+        height: auto;
+        max-height: 200px;
+        object-fit: contain;
+        border-radius: 6px 6px 0 0;
+        display: block;
+      }
+      
+      /* Video-specific styling */
+      .shared-media[controls] {
+        width: 100%;
+        max-width: 100%;
+        object-fit: cover;
       }
 
       .message-time {
@@ -440,10 +469,9 @@
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
         z-index: 10;
         animation: fadeIn 0.2s ease;
-        bottom: -40px;
-        left: 50%;
-        transform: translateX(-50%);
         display: none;
+        /* The positioning will be set in JavaScript */
+        max-width: 100%; /* Ensure it doesn't go beyond the container */
       }
 
       .reaction-picker.visible {
@@ -514,9 +542,10 @@
         .input-row {
           flex-direction: column;
         }
-
-        .reaction-picker {
-          bottom: -35px;
+        
+        /* Improve media display on mobile */
+        .shared-media {
+          max-height: 180px;
         }
       }
     </style>
@@ -598,7 +627,9 @@
         <button class="reaction-btn" data-reaction="😆" title="Haha">😆</button>
         <button class="reaction-btn" data-reaction="😮" title="Wow">😮</button>
         <button class="reaction-btn" data-reaction="😢" title="Sad">😢</button>
-        <button class="reaction-btn" data-reaction="😠" title="Angry">😠</button>
+        <button class="reaction-btn" data-reaction="😠" title="Angry">
+          😠
+        </button>
       </div>
     </template>
   </body>

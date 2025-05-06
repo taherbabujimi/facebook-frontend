@@ -420,16 +420,10 @@ function showReactionPicker(messageElement, messageId) {
   // Get the reaction picker element
   const pickerElement = reactionPicker.querySelector(".reaction-picker");
 
-  // Position the picker differently based on message alignment
-  if (messageElement.classList.contains("message-sent")) {
-    // For right-aligned (sent) messages
-    pickerElement.style.left = "auto";
-    pickerElement.style.right = "-135%";
-  } else {
-    // For left-aligned (received) messages
-    pickerElement.style.right = "auto";
-    pickerElement.style.left = "140%";
-  }
+  // Get message container dimensions
+  const chatWindow = document.getElementById("chatWindow");
+  const messageRect = messageElement.getBoundingClientRect();
+  const chatWindowRect = chatWindow.getBoundingClientRect();
 
   // Add the reaction picker to the message
   messageElement.appendChild(reactionPicker);
@@ -437,6 +431,39 @@ function showReactionPicker(messageElement, messageId) {
   // Make it visible
   const addedPickerElement = messageElement.querySelector(".reaction-picker");
   addedPickerElement.classList.add("visible");
+
+  // Calculate safe positioning that prevents overflow
+  if (messageElement.classList.contains("message-sent")) {
+    // For right-aligned (sent) messages
+    // Position the picker to stay within container bounds on the left side
+    addedPickerElement.style.right = "0";
+    addedPickerElement.style.left = "auto";
+    addedPickerElement.style.bottom = "-40px";
+
+    // Check if the picker would extend beyond the left edge
+    const pickerRect = addedPickerElement.getBoundingClientRect();
+    if (pickerRect.left < chatWindowRect.left + 10) {
+      // If too far left, position it centered below the message
+      addedPickerElement.style.right = "auto";
+      addedPickerElement.style.left = "50%";
+      addedPickerElement.style.transform = "translateX(-50%)";
+    }
+  } else {
+    // For left-aligned (received) messages
+    // Position the picker to stay within container bounds on the right side
+    addedPickerElement.style.left = "0";
+    addedPickerElement.style.right = "auto";
+    addedPickerElement.style.bottom = "-40px";
+
+    // Check if the picker would extend beyond the right edge
+    const pickerRect = addedPickerElement.getBoundingClientRect();
+    if (pickerRect.right > chatWindowRect.right - 10) {
+      // If too far right, position it centered below the message
+      addedPickerElement.style.left = "50%";
+      addedPickerElement.style.right = "auto";
+      addedPickerElement.style.transform = "translateX(-50%)";
+    }
+  }
 
   // Add event listeners to reaction buttons
   const reactionButtons = addedPickerElement.querySelectorAll(".reaction-btn");
@@ -571,22 +598,57 @@ function renderMessage(message, isSent) {
 
   const messageElement = document.createElement("div");
   messageElement.className = `message message-${isSent ? "sent" : "received"}`;
-  messageElement.id = `message-${message.id}`; // Add ID for easy reference
+  messageElement.id = `message-${message.id}`;
   messageElement.dataset.messageId = message.id;
 
   // Add transition for smooth animations
   messageElement.style.transition = "opacity 0.3s ease, transform 0.3s ease";
 
-  // Format message content
-  const contentText = message.content;
+  // Check if message has media content
+  if (message.post && message.post.filePublicId) {
+    // Create media container
+    const mediaPreview = document.createElement("div");
+    mediaPreview.className = "media-preview";
+
+    // Create appropriate element based on media type
+    const mediaElement =
+      message.post.fileResourceType === "image"
+        ? document.createElement("img")
+        : document.createElement("video");
+
+    mediaElement.src = message.post.fileUrl;
+    mediaElement.alt = "Shared media";
+    mediaElement.className = "shared-media";
+
+    // For videos, add controls and proper attributes
+    if (message.post.fileResourceType === "video") {
+      mediaElement.controls = true;
+      mediaElement.preload = "metadata";
+      mediaElement.playsInline = true;
+    }
+
+    // Add media to preview container
+    mediaPreview.appendChild(mediaElement);
+
+    // Add media container to message
+    messageElement.appendChild(mediaPreview);
+
+    // // If there's also text content, add it below the media
+    // if (message.content && message.content.trim()) {
+    //   const textContent = document.createElement("div");
+    //   textContent.className = "message-text";
+    //   textContent.textContent = message.content;
+    //   messageElement.appendChild(textContent);
+    // }
+  } else {
+    // Text-only message
+    messageElement.textContent = message.content || "";
+  }
 
   // Add timestamp
   const timeElement = document.createElement("span");
   timeElement.className = "message-time";
   timeElement.textContent = formatTimestamp(message.createdAt || new Date());
-
-  // Set the inner HTML of the message
-  messageElement.textContent = contentText;
   messageElement.appendChild(timeElement);
 
   // Add delete option for sent messages
@@ -617,10 +679,6 @@ function renderMessage(message, isSent) {
   // Check if there are pending reaction updates for this message
   const pendingReactions = pendingReactionUpdates.get(message.id.toString());
   if (pendingReactions) {
-    console.log(
-      `Found pending reactions for message ${message.id}`,
-      pendingReactions
-    );
     // Apply the pending reaction updates
     updateMessageReactions(message.id, pendingReactions);
     // Remove from pending queue
